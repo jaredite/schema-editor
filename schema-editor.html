@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DB Schema Editor</title>
+  <style>
+    /* =====================================================================
+       CSS CUSTOM PROPERTIES
+       ===================================================================== */
+    :root {
+      --sidebar-width: 260px;
+      --header-height: 48px;
+
+      /* Color palette */
+      --bg-app:       #1e1f22;
+      --bg-sidebar:   #27282d;
+      --bg-main:      #f7f8fa;
+      --bg-card:      #ffffff;
+      --border:       #dde1e7;
+      --border-dark:  #3a3b40;
+
+      --accent:       #4f86f7;
+      --accent-hover: #3a6fe0;
+      --danger:       #e05252;
+      --danger-hover: #c73f3f;
+      --success:      #3cb97e;
+
+      --text-main:    #1a1b1e;
+      --text-muted:   #6b7280;
+      --text-sidebar: #d1d5db;
+      --text-sidebar-muted: #8b949e;
+
+      --row-hover:    #f0f4ff;
+      --selected-bg:  #e8efff;
+    }
+
+    /* =====================================================================
+       RESET & BASE
+       ===================================================================== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text-main);
+      background: var(--bg-app);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* =====================================================================
+       TOP HEADER BAR
+       ===================================================================== */
+    #app-header {
+      height: var(--header-height);
+      background: var(--bg-app);
+      border-bottom: 1px solid var(--border-dark);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+    #app-header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #e5e7eb;
+      letter-spacing: 0.01em;
+    }
+    #app-header h1 span { color: var(--accent); }
+    .header-actions { display: flex; gap: 8px; align-items: center; }
+
+    /* =====================================================================
+       BUTTONS
+       ===================================================================== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.15s, opacity 0.15s;
+      white-space: nowrap;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary   { background: var(--accent);  color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-secondary { background: #3a3c42; color: #d1d5db; }
+    .btn-secondary:hover:not(:disabled) { background: #45474f; }
+    .btn-ghost { background: transparent; color: var(--text-muted); padding: 4px 8px; }
+    .btn-ghost:hover { background: #e5e7eb; color: var(--text-main); }
+    .btn-danger { background: transparent; color: var(--danger); padding: 4px 8px; }
+    .btn-danger:hover { background: #fde8e8; }
+    .btn-icon { padding: 4px 6px; font-size: 13px; border-radius: 4px; }
+
+    /* =====================================================================
+       MAIN LAYOUT: SIDEBAR + CONTENT
+       ===================================================================== */
+    #layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* =====================================================================
+       SIDEBAR
+       ===================================================================== */
+    #sidebar {
+      width: var(--sidebar-width);
+      min-width: var(--sidebar-width);
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-dark);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #sidebar-toolbar {
+      padding: 10px 12px;
+      display: flex;
+      gap: 6px;
+      border-bottom: 1px solid var(--border-dark);
+      flex-shrink: 0;
+    }
+    #sidebar-toolbar .btn { flex: 1; justify-content: center; font-size: 12px; padding: 5px 8px; }
+    #sidebar-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+
+    /* Scrollbar styling for sidebar */
+    #sidebar-list::-webkit-scrollbar { width: 6px; }
+    #sidebar-list::-webkit-scrollbar-track { background: transparent; }
+    #sidebar-list::-webkit-scrollbar-thumb { background: #3a3b40; border-radius: 3px; }
+
+    /* ---- Folder ---- */
+    .folder-block {
+      margin-bottom: 2px;
+    }
+    .folder-header {
+      display: flex;
+      align-items: center;
+      padding: 5px 10px;
+      cursor: pointer;
+      user-select: none;
+      border-radius: 5px;
+      margin: 0 4px;
+      color: var(--text-sidebar-muted);
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      transition: background 0.1s;
+    }
+    .folder-header:hover { background: rgba(255,255,255,0.05); }
+    .folder-header.drag-over { background: rgba(79,134,247,0.2); outline: 2px dashed var(--accent); }
+    .folder-toggle { margin-right: 5px; font-size: 10px; transition: transform 0.15s; }
+    .folder-name-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .folder-actions { display: flex; gap: 2px; opacity: 0; transition: opacity 0.15s; }
+    .folder-header:hover .folder-actions { opacity: 1; }
+    .folder-actions button {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-sidebar-muted); font-size: 12px; padding: 2px 4px;
+      border-radius: 3px;
+    }
+    .folder-actions button:hover { background: rgba(255,255,255,0.1); color: var(--text-sidebar); }
+    .folder-children {
+      padding-left: 8px;
+    }
+    .folder-children.collapsed { display: none; }
+
+    /* Drop zone for ungrouped tables */
+    #ungrouped-zone {
+      min-height: 4px;
+      padding: 4px 4px 0;
+    }
+    #ungrouped-zone.drag-over {
+      background: rgba(79,134,247,0.08);
+      border-radius: 6px;
+      outline: 2px dashed var(--accent);
+      outline-offset: -2px;
+    }
+
+    /* ---- Table item ---- */
+    .table-item {
+      display: flex;
+      align-items: center;
+      padding: 6px 10px;
+      margin: 1px 4px;
+      border-radius: 5px;
+      cursor: pointer;
+      color: var(--text-sidebar);
+      font-size: 13px;
+      transition: background 0.1s;
+      user-select: none;
+    }
+    .table-item:hover { background: rgba(255,255,255,0.06); }
+    .table-item.selected { background: rgba(79,134,247,0.18); color: #a8c4fd; }
+    .table-item.dragging { opacity: 0.4; }
+    .table-icon { margin-right: 7px; font-size: 12px; opacity: 0.6; }
+    .table-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .table-item-del {
+      opacity: 0; background: none; border: none; cursor: pointer;
+      color: var(--danger); font-size: 13px; padding: 2px 5px; border-radius: 3px;
+      transition: opacity 0.15s;
+    }
+    .table-item:hover .table-item-del { opacity: 1; }
+    .table-item-del:hover { background: rgba(224,82,82,0.15); }
+
+    /* =====================================================================
+       MAIN CONTENT AREA
+       ===================================================================== */
+    #main {
+      flex: 1;
+      overflow-y: auto;
+      background: var(--bg-main);
+      display: flex;
+      flex-direction: column;
+    }
+    #main::-webkit-scrollbar { width: 8px; }
+    #main::-webkit-scrollbar-track { background: var(--bg-main); }
+    #main::-webkit-scrollbar-thumb { background: #c5cad4; border-radius: 4px; }
+
+    /* Empty state */
+    #empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      gap: 12px;
+      padding: 40px;
+    }
+    #empty-state .empty-icon { font-size: 48px; opacity: 0.3; }
+    #empty-state p { font-size: 15px; }
+    #empty-state small { font-size: 12px; opacity: 0.7; }
+
+    /* Table editor */
+    #table-editor { padding: 28px 32px; max-width: 1100px; }
+
+    /* ---- Table metadata card ---- */
+    #table-meta-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .meta-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+    .meta-row:last-child { margin-bottom: 0; }
+    .meta-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      width: 110px;
+      flex-shrink: 0;
+      padding-top: 7px;
+    }
+    .meta-input {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--text-main);
+      background: #fff;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      resize: none;
+    }
+    .meta-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(79,134,247,0.12);
+    }
+    .meta-input.name-input { font-weight: 600; font-size: 15px; }
+
+    /* ---- Fields card ---- */
+    #fields-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      margin-bottom: 16px;
+    }
+    #fields-card-header {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #fafbfc;
+    }
+    #fields-card-header h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* ---- Field table ---- */
+    #fields-table-wrap { overflow-x: auto; }
+    #fields-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    #fields-table thead tr {
+      background: #f4f5f7;
+    }
+    #fields-table th {
+      padding: 9px 10px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    /* Column widths — col 1 is the drag handle */
+    #fields-table th:nth-child(1) { width: 24px; padding: 0; }  /* Drag handle */
+    #fields-table th:nth-child(2) { width: 80px; }   /* Key Type */
+    #fields-table th:nth-child(3) { width: 140px; }  /* Field Name */
+    #fields-table th:nth-child(4) { width: 140px; }  /* Previous Name */
+    #fields-table th:nth-child(5) { width: 100px; }  /* Field Type */
+    #fields-table th:nth-child(6) { min-width: 220px; } /* Description */
+    #fields-table th:nth-child(7) { min-width: 140px; } /* Criteria */
+    #fields-table th:nth-child(8) { width: 40px; }   /* Actions */
+
+    /* Drag handle cell */
+    .drag-handle-cell { width: 24px; padding: 0 !important; text-align: center; }
+    .drag-handle {
+      display: inline-block;
+      color: var(--text-muted);
+      opacity: 0.25;
+      cursor: grab;
+      font-size: 14px;
+      padding: 8px 4px;
+      user-select: none;
+      line-height: 1;
+    }
+    .drag-handle:hover { opacity: 0.7; }
+    .drag-handle:active { cursor: grabbing; }
+
+    /* Drop position indicators */
+    #fields-table tbody tr.drop-above { box-shadow: inset 0 2px 0 var(--accent); }
+    #fields-table tbody tr.drop-below { box-shadow: inset 0 -2px 0 var(--accent); }
+    #fields-table tbody tr.row-dragging { opacity: 0.35; }
+
+    #fields-table tbody tr {
+      border-bottom: 1px solid #eef0f3;
+      transition: background 0.1s;
+    }
+    #fields-table tbody tr:last-child { border-bottom: none; }
+    #fields-table tbody tr:hover { background: var(--row-hover); }
+
+    /* Editable cells */
+    #fields-table td {
+      padding: 0;
+      vertical-align: top;
+    }
+    #fields-table td .cell-input {
+      display: block;
+      width: 100%;
+      padding: 8px 10px;
+      border: none;
+      background: transparent;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--text-main);
+      outline: none;
+      transition: background 0.1s, box-shadow 0.1s;
+      /* textarea-specific: wrap text, grow with content */
+      resize: none;
+      overflow: hidden;
+      white-space: pre-wrap;
+      min-height: 34px;
+      line-height: 1.5;
+      box-sizing: border-box;
+    }
+    #fields-table td .cell-input:focus {
+      background: #edf2ff;
+      box-shadow: inset 0 0 0 2px var(--accent);
+      border-radius: 4px;
+    }
+    #fields-table td.action-cell {
+      text-align: center;
+    }
+    .row-del-btn {
+      background: none; border: none; cursor: pointer;
+      color: #c5cad4; font-size: 14px; padding: 4px 6px;
+      border-radius: 4px; transition: color 0.15s, background 0.15s;
+      opacity: 0;
+    }
+    #fields-table tbody tr:hover .row-del-btn { opacity: 1; }
+    .row-del-btn:hover { color: var(--danger); background: #fde8e8; }
+
+    /* Add row button row */
+    #add-field-row td {
+      padding: 8px 10px;
+    }
+
+    /* =====================================================================
+       TOAST NOTIFICATION
+       ===================================================================== */
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #1a1b1e;
+      color: #e5e7eb;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 1000;
+      pointer-events: none;
+    }
+    #toast.visible { opacity: 1; transform: translateY(0); }
+
+    /* =====================================================================
+       MODAL (rename)
+       ===================================================================== */
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 500;
+    }
+    .modal {
+      background: #fff; border-radius: 10px;
+      padding: 24px; width: 360px; max-width: 90vw;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    }
+    .modal h2 { font-size: 16px; margin-bottom: 14px; }
+    .modal input {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+      border-radius: 6px; font-size: 14px; font-family: inherit;
+      margin-bottom: 16px;
+    }
+    .modal input:focus { outline: none; border-color: var(--accent); }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+    /* =====================================================================
+       MISC
+       ===================================================================== */
+    #import-file-input { display: none; }
+    .separator { width: 1px; height: 20px; background: var(--border-dark); margin: 0 4px; }
+  </style>
+</head>
+<body>
+
+<!-- =====================================================================
+     TOP HEADER
+     ===================================================================== -->
+<header id="app-header">
+  <h1>DB <span>Schema</span> Editor</h1>
+  <div class="header-actions">
+    <span id="autosave-indicator" style="font-size:12px;color:#6b7280;"></span>
+    <div class="separator"></div>
+    <button class="btn btn-secondary" onclick="exportData()" title="Download schema as JSON">
+      &#8595; Export JSON
+    </button>
+    <button class="btn btn-primary" onclick="triggerImport()" title="Load schema from JSON file">
+      &#8593; Import JSON
+    </button>
+    <input type="file" id="import-file-input" accept=".json,application/json" onchange="importData(event)" />
+  </div>
+</header>
+
+<!-- =====================================================================
+     MAIN LAYOUT
+     ===================================================================== -->
+<div id="layout">
+
+  <!-- SIDEBAR -->
+  <nav id="sidebar">
+    <div id="sidebar-toolbar">
+      <button class="btn btn-secondary" onclick="promptNewTable(null)" title="Add a new table">
+        &#43; Table
+      </button>
+      <button class="btn btn-secondary" onclick="promptNewFolder()" title="Add a new folder">
+        &#43; Folder
+      </button>
+    </div>
+    <div id="sidebar-list">
+      <!-- Rendered by renderSidebar() -->
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main id="main">
+    <div id="empty-state">
+      <div class="empty-icon">&#128196;</div>
+      <p>No table selected</p>
+      <small>Select a table from the sidebar, or create one with &ldquo;+ Table&rdquo;</small>
+    </div>
+    <div id="table-editor" style="display:none;">
+      <!-- Rendered by renderMain() -->
+    </div>
+  </main>
+</div>
+
+<!-- Toast notification -->
+<div id="toast"></div>
+
+<script>
+/* =========================================================================
+   DATA MODEL & STATE
+   =========================================================================
+   The entire app state is a plain JS object:
+   {
+     folders:         Array of { id, name, collapsed }
+     tables:          Array of { id, folderId, currentName, newName, description, fields[] }
+     selectedTableId: string | null
+   }
+
+   Each field: { id, keyType, currentFieldName, newFieldName, fieldType, description, criteria }
+
+   PERSISTENCE:
+   - On every mutation, state is serialized to localStorage key "schemaEditorData".
+   - Export: state (minus selectedTableId) is downloaded as schema.json.
+   - Import: user picks a schema.json file; it replaces state, then re-renders.
+   - The HTML file itself never embeds the data — it stays generic and can live on
+     a shared drive. Users share the JSON file separately (same folder recommended).
+
+   LIMITATIONS:
+   - localStorage is browser+origin scoped; refreshing the same file in the same
+     browser will restore state, but opening the file on a different machine won't.
+   - For true sharing across machines, use Export/Import to pass the JSON file.
+   ========================================================================= */
+
+let state = {
+  folders: [],
+  tables: [],
+  selectedTableId: null,
+};
+
+/* -------------------------------------------------------------------------
+   ID GENERATION
+   ------------------------------------------------------------------------- */
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+/* -------------------------------------------------------------------------
+   PERSISTENCE: LocalStorage
+   auto-saves on every mutation so browser refreshes don't lose work.
+   ------------------------------------------------------------------------- */
+let saveTimer = null;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(persistToLocalStorage, 400);
+}
+
+function persistToLocalStorage() {
+  try {
+    const data = { folders: state.folders, tables: state.tables };
+    localStorage.setItem('schemaEditorData', JSON.stringify(data));
+    showAutosaveIndicator();
+  } catch (e) {
+    console.warn('LocalStorage save failed:', e);
+  }
+}
+
+function loadFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem('schemaEditorData');
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (data && Array.isArray(data.tables)) {
+      state.folders = data.folders || [];
+      state.tables  = data.tables  || [];
+      showAutosaveIndicator();
+      return true;
+    }
+  } catch (e) {
+    console.warn('LocalStorage load failed:', e);
+  }
+  return false;
+}
+
+function showAutosaveIndicator() {
+  const el = document.getElementById('autosave-indicator');
+  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  el.textContent = 'Last edited ' + time;
+  el.style.color = '#6b7280';
+}
+
+/* -------------------------------------------------------------------------
+   EXPORT: downloads state as schema.json
+   This is the primary mechanism for sharing data across machines.
+   User should place schema.json in the same shared folder as schema-editor.html.
+   ------------------------------------------------------------------------- */
+function exportData() {
+  const data = { folders: state.folders, tables: state.tables };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'schema.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Exported schema.json');
+}
+
+/* -------------------------------------------------------------------------
+   IMPORT: reads a JSON file chosen by the user
+   Replaces all state, then re-renders. LocalStorage is updated immediately.
+   ------------------------------------------------------------------------- */
+function triggerImport() {
+  document.getElementById('import-file-input').click();
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data || !Array.isArray(data.tables)) {
+        showToast('Invalid schema file');
+        return;
+      }
+      state.folders = data.folders || [];
+      state.tables  = data.tables  || [];
+      state.selectedTableId = null;
+      persistToLocalStorage();
+      renderSidebar();
+      renderMain();
+      showToast('Imported ' + file.name);
+    } catch (err) {
+      showToast('Failed to parse JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  // Reset so the same file can be re-imported if needed
+  event.target.value = '';
+}
+
+/* =========================================================================
+   SIDEBAR RENDERING
+   Rebuilds the entire sidebar DOM from state each time. Simple but
+   effective for this scale of data.
+   ========================================================================= */
+function renderSidebar() {
+  const list = document.getElementById('sidebar-list');
+  list.innerHTML = '';
+
+  /* -- Folders -- */
+  state.folders.forEach(folder => {
+    const folderBlock = document.createElement('div');
+    folderBlock.className = 'folder-block';
+    folderBlock.dataset.folderId = folder.id;
+
+    // Folder header (acts as drop target)
+    const header = document.createElement('div');
+    header.className = 'folder-header';
+    header.innerHTML = `
+      <span class="folder-toggle">${folder.collapsed ? '&#9658;' : '&#9660;'}</span>
+      <span class="folder-name-text">${escHtml(folder.name)}</span>
+      <span class="folder-actions">
+        <button title="Rename folder" onclick="promptRenameFolder('${folder.id}',event)">&#9998;</button>
+        <button title="Delete folder" onclick="deleteFolder('${folder.id}',event)">&#128465;</button>
+      </span>
+    `;
+    header.addEventListener('click', () => toggleFolder(folder.id));
+    // Drop target: dropping a table onto a folder header assigns it to that folder
+    setupFolderDropTarget(header, folder.id);
+
+    // Folder children container
+    const children = document.createElement('div');
+    children.className = 'folder-children' + (folder.collapsed ? ' collapsed' : '');
+
+    // Tables in this folder
+    const folderTables = state.tables.filter(t => t.folderId === folder.id);
+    folderTables.forEach(table => {
+      children.appendChild(makeTableItem(table));
+    });
+
+    folderBlock.appendChild(header);
+    folderBlock.appendChild(children);
+    list.appendChild(folderBlock);
+  });
+
+  /* -- Ungrouped tables (drop zone) -- */
+  const ungroupedZone = document.createElement('div');
+  ungroupedZone.id = 'ungrouped-zone';
+  // Drop target: dropping here removes the table from any folder
+  setupFolderDropTarget(ungroupedZone, null);
+
+  const ungrouped = state.tables.filter(t => !t.folderId);
+  if (ungrouped.length > 0 && state.folders.length > 0) {
+    // Subtle divider label when both folders and ungrouped tables exist
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#4b5263;padding:8px 14px 4px;';
+    label.textContent = 'Ungrouped';
+    ungroupedZone.appendChild(label);
+  }
+  ungrouped.forEach(table => {
+    ungroupedZone.appendChild(makeTableItem(table));
+  });
+
+  list.appendChild(ungroupedZone);
+}
+
+/* Builds a single .table-item element */
+function makeTableItem(table) {
+  const item = document.createElement('div');
+  item.className = 'table-item' + (table.id === state.selectedTableId ? ' selected' : '');
+  item.dataset.tableId = table.id;
+  item.draggable = true;
+  item.innerHTML = `
+    <span class="table-icon">&#9741;</span>
+    <span class="table-item-name">${escHtml(table.newName || table.currentName || 'Unnamed')}</span>
+    <button class="table-item-del" title="Delete table" onclick="deleteTable('${table.id}',event)">&#215;</button>
+  `;
+  item.addEventListener('click', () => selectTable(table.id));
+
+  /* Drag-and-drop: tables are draggable items */
+  item.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('text/plain', table.id);
+    e.dataTransfer.effectAllowed = 'move';
+    item.classList.add('dragging');
+  });
+  item.addEventListener('dragend', () => {
+    item.classList.remove('dragging');
+  });
+
+  return item;
+}
+
+/* Sets up a drop target (folder header or ungrouped zone) */
+function setupFolderDropTarget(el, folderId) {
+  el.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    el.classList.add('drag-over');
+  });
+  el.addEventListener('dragleave', (e) => {
+    if (!el.contains(e.relatedTarget)) {
+      el.classList.remove('drag-over');
+    }
+  });
+  el.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    el.classList.remove('drag-over');
+    const tableId = e.dataTransfer.getData('text/plain');
+    const table = state.tables.find(t => t.id === tableId);
+    if (table) {
+      table.folderId = folderId;  // null = ungrouped
+      scheduleSave();
+      renderSidebar();
+    }
+  });
+}
+
+/* =========================================================================
+   FOLDER MANAGEMENT
+   ========================================================================= */
+function toggleFolder(folderId) {
+  const folder = state.folders.find(f => f.id === folderId);
+  if (!folder) return;
+  folder.collapsed = !folder.collapsed;
+  scheduleSave();
+  renderSidebar();
+}
+
+function promptNewFolder() {
+  openModal('New Folder', '', 'Folder name', (name) => {
+    if (!name.trim()) return;
+    state.folders.push({ id: uid(), name: name.trim(), collapsed: false });
+    scheduleSave();
+    renderSidebar();
+    showToast('Folder created');
+  });
+}
+
+function promptRenameFolder(folderId, event) {
+  event.stopPropagation();
+  const folder = state.folders.find(f => f.id === folderId);
+  if (!folder) return;
+  openModal('Rename Folder', folder.name, 'Folder name', (name) => {
+    if (!name.trim()) return;
+    folder.name = name.trim();
+    scheduleSave();
+    renderSidebar();
+  });
+}
+
+function deleteFolder(folderId, event) {
+  event.stopPropagation();
+  const folder = state.folders.find(f => f.id === folderId);
+  if (!folder) return;
+  if (!confirm(`Delete folder "${folder.name}"? Tables inside will become ungrouped.`)) return;
+  // Ungroup tables that belonged to this folder
+  state.tables.forEach(t => { if (t.folderId === folderId) t.folderId = null; });
+  state.folders = state.folders.filter(f => f.id !== folderId);
+  scheduleSave();
+  renderSidebar();
+  showToast('Folder deleted');
+}
+
+/* =========================================================================
+   TABLE MANAGEMENT
+   ========================================================================= */
+function promptNewTable(folderId) {
+  openModal('New Table', '', 'Table name', (name) => {
+    if (!name.trim()) return;
+    const table = {
+      id: uid(),
+      folderId: folderId,
+      currentName: name.trim(),
+      newName: '',
+      description: '',
+      fields: [],
+    };
+    state.tables.push(table);
+    scheduleSave();
+    renderSidebar();
+    selectTable(table.id);
+    showToast('Table created');
+  });
+}
+
+function selectTable(tableId) {
+  state.selectedTableId = tableId;
+  renderSidebar();   // refresh selected highlight
+  renderMain();
+}
+
+function deleteTable(tableId, event) {
+  if (event) event.stopPropagation();
+  const table = state.tables.find(t => t.id === tableId);
+  if (!table) return;
+  if (!confirm(`Delete table "${table.currentName}"?`)) return;
+  state.tables = state.tables.filter(t => t.id !== tableId);
+  if (state.selectedTableId === tableId) state.selectedTableId = null;
+  scheduleSave();
+  renderSidebar();
+  renderMain();
+  showToast('Table deleted');
+}
+
+/* =========================================================================
+   MAIN CONTENT RENDERING
+   Shows the selected table's metadata + field grid.
+   ========================================================================= */
+function renderMain() {
+  const emptyState  = document.getElementById('empty-state');
+  const tableEditor = document.getElementById('table-editor');
+
+  if (!state.selectedTableId) {
+    emptyState.style.display  = '';
+    tableEditor.style.display = 'none';
+    return;
+  }
+
+  const table = state.tables.find(t => t.id === state.selectedTableId);
+  if (!table) {
+    emptyState.style.display  = '';
+    tableEditor.style.display = 'none';
+    return;
+  }
+
+  emptyState.style.display  = 'none';
+  tableEditor.style.display = '';
+  tableEditor.innerHTML = '';
+
+  /* ---- Table metadata card ---- */
+  const metaCard = document.createElement('div');
+  metaCard.id = 'table-meta-card';
+  metaCard.innerHTML = `
+    <div class="meta-row">
+      <span class="meta-label">Table Name</span>
+      <input class="meta-input name-input" type="text" value="${escAttr(table.newName)}"
+        data-field="newName" placeholder="e.g. SalesOrderHeader"
+        oninput="updateTableMeta('${table.id}', 'newName', this.value)" />
+    </div>
+    <div class="meta-row">
+      <span class="meta-label">Existing Name</span>
+      <input class="meta-input name-input" type="text" value="${escAttr(table.currentName)}"
+        data-field="currentName" placeholder="e.g. OrderHeader"
+        oninput="updateTableMeta('${table.id}', 'currentName', this.value)" />
+    </div>
+    <div class="meta-row">
+      <span class="meta-label">Description</span>
+      <textarea class="meta-input" rows="2" placeholder="Describe what this table stores…"
+        oninput="updateTableMeta('${table.id}', 'description', this.value)"
+        >${escHtml(table.description)}</textarea>
+    </div>
+  `;
+  tableEditor.appendChild(metaCard);
+
+  /* ---- Fields card ---- */
+  const fieldsCard = document.createElement('div');
+  fieldsCard.id = 'fields-card';
+  fieldsCard.innerHTML = `
+    <div id="fields-card-header">
+      <h3>Fields</h3>
+      <button class="btn btn-primary btn-icon" onclick="addField('${table.id}')" title="Add a new field row">
+        &#43; Add Field
+      </button>
+    </div>
+    <div id="fields-table-wrap">
+      <table id="fields-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Key Type</th>
+            <th>Field Name</th>
+            <th>Previous Name</th>
+            <th>Field Type</th>
+            <th>Description</th>
+            <th>Criteria</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="fields-tbody">
+        </tbody>
+      </table>
+    </div>
+  `;
+  tableEditor.appendChild(fieldsCard);
+
+  renderFieldRows(table);
+}
+
+/* Renders (or re-renders) only the tbody rows */
+function renderFieldRows(table) {
+  const tbody = document.getElementById('fields-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  table.fields.forEach(field => {
+    tbody.appendChild(makeFieldRow(table.id, field));
+  });
+}
+
+/* Builds a single <tr> for a field row */
+function makeFieldRow(tableId, field) {
+  const tr = document.createElement('tr');
+  tr.dataset.fieldId = field.id;
+  tr.draggable = true;
+
+  /* ---- Drag handle cell (first column) ---- */
+  const handleTd = document.createElement('td');
+  handleTd.className = 'drag-handle-cell';
+  handleTd.innerHTML = '<span class="drag-handle" title="Drag to reorder">&#8942;</span>';
+  tr.appendChild(handleTd);
+
+  /* ---- Row drag-to-reorder events ----
+     Uses a separate dataTransfer key ('fieldRow') so it doesn't conflict
+     with the sidebar table drag which uses 'text/plain'. */
+  tr.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('fieldRow', JSON.stringify({ tableId, fieldId: field.id }));
+    e.dataTransfer.effectAllowed = 'move';
+    // Defer class add so the drag image captures the normal row appearance
+    requestAnimationFrame(() => tr.classList.add('row-dragging'));
+  });
+
+  tr.addEventListener('dragend', () => {
+    tr.classList.remove('row-dragging');
+    // Clean up any lingering drop indicators
+    document.querySelectorAll('#fields-tbody tr').forEach(r => {
+      r.classList.remove('drop-above', 'drop-below');
+    });
+  });
+
+  tr.addEventListener('dragover', (e) => {
+    const raw = e.dataTransfer.types.includes('fieldrow') || e.dataTransfer.types.includes('fieldRow');
+    if (!raw) return;  // ignore sidebar table drags
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    // Determine whether to insert above or below by checking cursor Y against row midpoint
+    const rect = tr.getBoundingClientRect();
+    const isAbove = e.clientY < rect.top + rect.height / 2;
+    tr.classList.toggle('drop-above', isAbove);
+    tr.classList.toggle('drop-below', !isAbove);
+  });
+
+  tr.addEventListener('dragleave', (e) => {
+    if (!tr.contains(e.relatedTarget)) {
+      tr.classList.remove('drop-above', 'drop-below');
+    }
+  });
+
+  tr.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    tr.classList.remove('drop-above', 'drop-below');
+
+    let payload;
+    try { payload = JSON.parse(e.dataTransfer.getData('fieldRow')); } catch { return; }
+    const { tableId: srcTableId, fieldId: srcFieldId } = payload;
+
+    // Only allow reordering within the same table
+    if (srcTableId !== tableId) return;
+    const targetFieldId = field.id;
+    if (srcFieldId === targetFieldId) return;
+
+    const table = state.tables.find(t => t.id === tableId);
+    if (!table) return;
+
+    const rect = tr.getBoundingClientRect();
+    const insertBefore = e.clientY < rect.top + rect.height / 2;
+
+    // Reorder: splice out the dragged field, insert at new position
+    const srcIdx = table.fields.findIndex(f => f.id === srcFieldId);
+    const tgtIdx = table.fields.findIndex(f => f.id === targetFieldId);
+    if (srcIdx === -1 || tgtIdx === -1) return;
+
+    const [moved] = table.fields.splice(srcIdx, 1);
+    // After removing srcIdx, recalculate target index
+    const newTgtIdx = table.fields.findIndex(f => f.id === targetFieldId);
+    table.fields.splice(insertBefore ? newTgtIdx : newTgtIdx + 1, 0, moved);
+
+    scheduleSave();
+    renderFieldRows(table);
+  });
+
+  /* ---- Data columns ---- */
+  // Column order: Key Type | Field Name (newFieldName) | Previous Name (currentFieldName) | Field Type | Description | Criteria
+  const cols = ['keyType', 'newFieldName', 'currentFieldName', 'fieldType', 'description', 'criteria'];
+
+  cols.forEach(col => {
+    const td = document.createElement('td');
+    const input = document.createElement('textarea');
+    input.rows = 1;
+    input.className = 'cell-input';
+    input.value = field[col] || '';
+
+    // Auto-resize: shrink to 'auto' first so scrollHeight reflects true content height
+    function autoResize() {
+      input.style.height = 'auto';
+      input.style.height = input.scrollHeight + 'px';
+    }
+
+    input.addEventListener('input', () => {
+      updateField(tableId, field.id, col, input.value);
+      autoResize();
+    });
+
+    // Initialize height after DOM insertion (deferred so scrollHeight is accurate)
+    requestAnimationFrame(autoResize);
+
+    td.appendChild(input);
+    tr.appendChild(td);
+  });
+
+  // Delete button cell
+  const actionTd = document.createElement('td');
+  actionTd.className = 'action-cell';
+  const delBtn = document.createElement('button');
+  delBtn.className = 'row-del-btn';
+  delBtn.title = 'Delete this row';
+  delBtn.innerHTML = '&#215;';
+  delBtn.addEventListener('click', () => deleteField(tableId, field.id));
+  actionTd.appendChild(delBtn);
+  tr.appendChild(actionTd);
+
+  return tr;
+}
+
+/* =========================================================================
+   FIELD MANAGEMENT
+   ========================================================================= */
+function addField(tableId) {
+  const table = state.tables.find(t => t.id === tableId);
+  if (!table) return;
+  const newField = {
+    id: uid(),
+    keyType: '',
+    currentFieldName: '',
+    newFieldName: '',
+    fieldType: '',
+    description: '',
+    criteria: '',
+  };
+  table.fields.push(newField);
+  scheduleSave();
+
+  // Append a single row without re-rendering everything (preserves focus in other cells)
+  const tbody = document.getElementById('fields-tbody');
+  if (tbody) {
+    const row = makeFieldRow(tableId, newField);
+    tbody.appendChild(row);
+    // Focus the first input of the new row
+    const firstInput = row.querySelector('.cell-input');
+    if (firstInput) firstInput.focus();
+  }
+}
+
+function deleteField(tableId, fieldId) {
+  const table = state.tables.find(t => t.id === tableId);
+  if (!table) return;
+  table.fields = table.fields.filter(f => f.id !== fieldId);
+  scheduleSave();
+  // Remove the row from DOM directly
+  const row = document.querySelector(`#fields-tbody tr[data-field-id="${fieldId}"]`);
+  if (row) row.remove();
+}
+
+function updateField(tableId, fieldId, col, value) {
+  const table = state.tables.find(t => t.id === tableId);
+  if (!table) return;
+  const field = table.fields.find(f => f.id === fieldId);
+  if (!field) return;
+  field[col] = value;
+  scheduleSave();
+}
+
+function updateTableMeta(tableId, field, value) {
+  const table = state.tables.find(t => t.id === tableId);
+  if (!table) return;
+  table[field] = value;
+  scheduleSave();
+  // Keep the sidebar label in sync whenever the displayed name fields change
+  if (field === 'newName' || field === 'currentName') {
+    const nameEl = document.querySelector(`.table-item[data-table-id="${tableId}"] .table-item-name`);
+    if (nameEl) nameEl.textContent = table.newName || table.currentName || 'Unnamed';
+  }
+}
+
+/* =========================================================================
+   MODAL HELPER
+   Simple inline modal for rename/create prompts. Avoids browser prompt().
+   ========================================================================= */
+function openModal(title, initialValue, placeholder, onConfirm) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  modal.innerHTML = `
+    <h2>${escHtml(title)}</h2>
+    <input type="text" value="${escAttr(initialValue)}" placeholder="${escAttr(placeholder)}" id="modal-input" />
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-confirm">OK</button>
+    </div>
+  `;
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  const input = modal.querySelector('#modal-input');
+  input.focus();
+  input.select();
+
+  const close = () => document.body.removeChild(backdrop);
+  const confirm = () => { onConfirm(input.value); close(); };
+
+  modal.querySelector('#modal-cancel').addEventListener('click', close);
+  modal.querySelector('#modal-confirm').addEventListener('click', confirm);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') confirm();
+    if (e.key === 'Escape') close();
+  });
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+}
+
+/* =========================================================================
+   TOAST
+   ========================================================================= */
+let toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('visible'), 2200);
+}
+
+/* =========================================================================
+   UTILITY: HTML escaping
+   ========================================================================= */
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function escAttr(str) {
+  return String(str || '').replace(/"/g, '&quot;');
+}
+
+/* =========================================================================
+   BOOTSTRAP
+   ========================================================================= */
+(function init() {
+  // Try to restore from localStorage on page load
+  const restored = loadFromLocalStorage();
+
+  // If nothing in localStorage, seed with a sample to help orient the user
+  if (!restored || state.tables.length === 0) {
+    const folderId = uid();
+    const tableId  = uid();
+    state.folders = [{ id: folderId, name: 'Sample', collapsed: false }];
+    state.tables = [{
+      id: tableId,
+      folderId: folderId,
+      currentName: 'OrderHeader',
+      newName: 'SalesOrderHeader',
+      description: 'Stores order header information',
+      fields: [
+        { id: uid(), keyType: 'PK',    currentFieldName: 'id',         newFieldName: 'order_id',    fieldType: 'int',      description: 'Primary identifier', criteria: 'greater than 0' },
+        { id: uid(), keyType: 'FK',    currentFieldName: 'customer_id',newFieldName: 'customer_id', fieldType: 'int',      description: 'Linked customer',     criteria: 'not null' },
+        { id: uid(), keyType: '',      currentFieldName: 'order_date',  newFieldName: 'order_date',  fieldType: 'datetime', description: 'Date order was placed',criteria: 'not null' },
+        { id: uid(), keyType: '',      currentFieldName: 'status',      newFieldName: 'order_status',fieldType: 'enum',     description: 'Current order status', criteria: 'active, closed, cancelled' },
+      ],
+    }];
+  }
+
+  renderSidebar();
+  renderMain();
+})();
+</script>
+
+</body>
+</html>
